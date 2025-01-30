@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "deepseekr1-ext.helloWorld",
-        "title": "Hello World"
+        "command": "deepseekr1-ext.chat",
+        "title": "Chat with DeepSeek R1"
       }
     ]
   },
