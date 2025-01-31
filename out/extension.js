@@ -42,32 +42,54 @@ const vscode = __importStar(require("vscode"));
 const ollama_1 = __importDefault(require("ollama"));
 // This method is called when your extension is activated
 function activate(context) {
+    // Define the model to be used
+    const chosenModel = 'deepseek-r1:1.5b';
+    // Register the command that starts the extension
     const disposable = vscode.commands.registerCommand('deepseekr1-ext.start', () => {
+        // Create and show a new webview panel
         const panel = vscode.window.createWebviewPanel('deepseekr1-ext', 'DeepSeek R1 Chat Extension', vscode.ViewColumn.One, { enableScripts: true });
+        // Set the HTML content for the webview
         panel.webview.html = getWebviewContent();
+        // Type guard to check if the error is a ResponseError
+        function isResponseError(error) {
+            return typeof error === 'object' && 'status_code' in error && 'message' in error;
+        }
+        // Handle messages received from the webview
         panel.webview.onDidReceiveMessage(async (message) => {
             if (message.command === 'chat') {
                 const userPrompt = message.text;
                 let responseText = '';
                 try {
+                    // Send the user prompt to the chat model and stream the response
                     const streamResponse = await ollama_1.default.chat({
-                        model: 'deepseek-r1:latest',
+                        model: chosenModel,
                         messages: [{ role: 'user', content: userPrompt }],
                         stream: true
                     });
+                    // Concatenate the streamed response parts
                     for await (const part of streamResponse) {
                         responseText += part.message.content;
                         panel.webview.postMessage({ command: 'chatResponse', text: responseText });
                     }
                 }
                 catch (error) {
-                    panel.webview.postMessage({ command: 'chatResponse', text: 'An error occurred' });
+                    // Handle specific error when the model is not found
+                    if (isResponseError(error) && error.status_code === 404 && error.message.includes(`model "${chosenModel}" not found`)) {
+                        responseText = `Model "${chosenModel}" not found. Please ensure the model is available and try again.`;
+                    }
+                    else {
+                        responseText = 'An error occurred';
+                    }
+                    console.error('Error during chat:', error);
+                    panel.webview.postMessage({ command: 'chatResponse', text: responseText });
                 }
             }
         });
     });
+    // Add the command to the extension's subscriptions
     context.subscriptions.push(disposable);
 }
+// Function to get the HTML content for the webview
 function getWebviewContent() {
     return /* html */ `	
 	<!DOCTYPE html>
@@ -89,11 +111,13 @@ function getWebviewContent() {
 		<script>
 			const vscode = acquireVsCodeApi();
 
+			// Send the user input to the extension when the button is clicked
 			document.getElementById('askBtn').addEventListener('click', () => {
 				const text = document.getElementById('prompt').value;
 				vscode.postMessage({ command: 'chat', text });
 			});
 			
+			// Handle messages received from the extension
 			window.addEventListener('message', event => {
 				const {command, text} = event.data;
 				if (command === 'chatResponse') {
